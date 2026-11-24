@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Investment Candlestick Tracker</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111c2e;--line:#26364d;--muted:#91a4bd;--text:#edf4ff;--green:#16c784;--red:#ea3943;--blue:#61a9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,Arial,sans-serif}
+header{padding:22px max(18px,calc((100% - 1150px)/2));border-bottom:1px solid var(--line);background:#0e192a}
+h1{font-size:23px;margin:0 0 5px}header p{margin:0;color:var(--muted);font-size:13px}
+main{max-width:1150px;margin:auto;padding:18px;display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.field{display:grid;gap:6px;flex:1;min-width:145px}
+label{font-size:12px;color:var(--muted)}input,select,button{font:inherit;border-radius:8px;border:1px solid var(--line);padding:10px;background:#0b1627;color:var(--text);min-width:0}
+button{cursor:pointer;background:#1b3554;border-color:#315579}button:hover{filter:brightness(1.15)}button.danger{background:#47242c;border-color:#74333e}button.secondary{background:#172437}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tabs button.active{background:#24517d;border-color:#4c8fc8}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{background:#0b1627;padding:12px;border-radius:10px}.stat small{color:var(--muted)}.stat strong{display:block;font-size:20px;margin-top:4px}
+canvas{width:100%;height:390px;display:block;background:#0b1627;border-radius:10px}
+.note{color:var(--muted);font-size:12px;line-height:1.5}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted)}
+.hidden{display:none!important}.positive{color:var(--green)}.negative{color:var(--red)}
+#lockscreen{position:fixed;inset:0;background:#08111f;z-index:10;display:grid;place-items:center;padding:20px}
+.lockcard{width:min(430px,100%);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px}.lockcard h2{margin-top:0}
+@media(max-width:650px){.stats{grid-template-columns:1fr}.panel{padding:12px}canvas{height:300px}}
+</style>
+</head>
+<body>
+<div id="lockscreen">
+ <div class="lockcard">
+  <h2 id="lockTitle">Investment tracker locked</h2>
+  <p class="note" id="lockMessage">Create an internal password to protect access to this tracker on this browser.</p>
+  <div class="field"><label for="lockPass">Password</label><input id="lockPass" type="password" autocomplete="current-password" placeholder="Enter password"></div>
+  <div class="field" id="confirmWrap" style="margin-top:10px"><label for="confirmPass">Confirm password</label><input id="confirmPass" type="password" autocomplete="new-password" placeholder="Re-enter password"></div>
+  <button id="unlockBtn" style="width:100%;margin-top:14px">Create secure lock</button>
+  <p class="note">Your entries are encrypted in this browser. If you forget the password and have no backup, the data cannot be recovered.</p>
+ </div>
+</div>
+<header><h1>Investment Candlestick Tracker</h1><p>Independent principal and profit/loss tracking · Angel One-inspired dark chart</p></header>
+<main>
+<section class="panel">
+ <div class="row" style="justify-content:space-between;align-items:center">
+  <div><strong>Portfolio overview</strong><div class="note">Principal is shown as a translucent blue candle; performance is shown separately in green/red.</div></div>
+  <div class="row"><button class="secondary" id="internalLock">Lock app</button><button class="secondary" id="backupBtn">External locker · Export</button><button class="secondary" id="restoreBtn">External locker · Import</button><input id="restoreFile" type="file" accept=".ivault,application/json" class="hidden"></div>
+ </div>
+ <div class="stats" style="margin-top:15px">
+  <div class="stat"><small>Total principal</small><strong id="principalTotal">₹0.00</strong></div>
+  <div class="stat"><small>Net profit / loss</small><strong id="pnlTotal">₹0.00</strong></div>
+  <div class="stat"><small>Current value (principal + P/L)</small><strong id="currentTotal">₹0.00</strong></div>
+ </div>
+</section>
+<section class="panel">
+ <div class="tabs"><button class="active" data-period="daily">Daily candles</button><button data-period="monthly">Monthly candles</button></div>
+ <div class="row" style="justify-content:space-between"><strong id="chartTitle">Daily performance</strong><span class="note">Scroll horizontally on small screens if needed</span></div>
+ <canvas id="chart" width="1100" height="390" aria-label="Investment candlestick chart"></canvas>
+ <div class="row" style="gap:18px;margin-top:10px"><span class="note">▮ Translucent blue: cumulative principal</span><span class="note positive">▮ Green: profit</span><span class="note negative">▮ Red: loss</span></div>
+</section>
+<section class="panel">
+ <strong>Add an entry</strong>
+ <p class="note">Enter only the amount and date for the type you are adding. Principal, profit and loss remain separate records.</p>
+ <div class="row" style="margin-top:12px">
+  <div class="field"><label for="entryType">Entry type</label><select id="entryType"><option value="principal">Principal addition</option><option value="profit">Profit</option><option value="loss">Loss</option></select></div>
+  <div class="field"><label for="amount">Amount (₹)</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="e.g. 5000"></div>
+  <div class="field"><label for="entryDate">Date</label><input id="entryDate" type="date"></div>
+  <button id="addEntry">Add entry</button>
+ </div>
+ <p class="note" id="entryHint">Principal additions increase the principal total.</p>
+</section>
+<section class="panel">
+ <div class="row" style="justify-content:space-between"><strong>Entry history</strong><button class="danger" id="clearAll">Delete all entries</button></div>
+ <div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="history"></tbody></table></div>
+</section>
+<section class="panel">
+ <strong>Security and data</strong>
+ <p class="note">Internal locker: password required to open this app on this browser. External locker: exports an independently encrypted <b>.ivault</b> backup that can be stored elsewhere and imported using its backup password. The two passwords can be different. Keep a backup safely; clearing browser data may remove the local encrypted copy.</p>
+ <div class="row"><button class="secondary" id="changePass">Change internal password</button><button class="secondary" id="exportCsv">Export CSV</button></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const enc=new TextEncoder(),dec=new TextDecoder();
+let key=null, salt=null, data={entries:[]}, period='daily', isNew=false;
+const fmt=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(n);
+const today=()=>new Date().toISOString().slice(0,10);
+$('entryDate').value=today();
+function b64(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)))}
+function un64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function derive(password,s){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:s,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function encryptObject(obj,password){const s=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),k=await derive(password,s),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,enc.encode(JSON.stringify(obj)));return {version:1,salt:b64(s),iv:b64(iv),ciphertext:b64(ct)}}
+async function decryptObject(blob,password){if(blob.version!==1)throw Error('Unsupported backup version');const k=await derive(password,un64(blob.salt));const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(blob.iv)},k,un64(blob.ciphertext));return JSON.parse(dec.decode(plain))}
+async function save(){const blob=await encryptObject(data,key.password);localStorage.setItem('ict_vault',JSON.stringify(blob));}
+async function unlock(){
+ const pass=$('lockPass').value;
+ try{
+  if(isNew){if(pass.length<8)throw Error('Use at least 8 characters.');if(pass!==$('confirmPass').value)throw Error('Passwords do not match.');key={password:pass};data={entries:[]};await save();}
+  else{const blob=JSON.parse(localStorage.getItem('ict_vault'));data=await decryptObject(blob,pass);key={password:pass};}
+  $('lockscreen').classList.add('hidden');render();
+ }catch(e){alert(isNew?e.message:'Incorrect password, or the local vault is damaged.');}
+}
+async function initLock(){isNew=!localStorage.getItem('ict_vault');$('lockTitle').textContent=isNew?'Create your internal lock':'Investment tracker locked';$('lockMessage').textContent=isNew?'Create an internal password to protect access to this tracker on this browser.':'Enter your internal password to decrypt and open your tracker.';$('confirmWrap').classList.toggle('hidden',!isNew);$('unlockBtn').textContent=isNew?'Create secure lock':'Unlock tracker';}
+$('unlockBtn').onclick=unlock;$('lockPass').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
+$('internalLock').onclick=()=>{key=null;$('lockPass').value='';$('lockscreen').classList.remove('hidden');initLock()};
+$('entryType').onchange=()=>{$('entryHint').textContent={principal:'Principal additions increase the principal total.',profit:'Profit is recorded separately and shown as a green candle.',loss:'Loss is recorded separately and shown as a red candle.'}[$('entryType').value]};
+$('addEntry').onclick=async()=>{const amount=Number($('amount').value),date=$('entryDate').value,type=$('entryType').value;if(!(amount>0)||!date){alert('Enter a valid positive amount and date.');return;}data.entries.push({id:crypto.randomUUID(),date,type,amount});data.entries.sort((a,b)=>a.date.localeCompare(b.date));await save();$('amount').value='';render();};
+$('clearAll').onclick=async()=>{if(confirm('Permanently delete every entry from this local vault? Export a backup first if needed.')){data.entries=[];await save();render();}};
+document.querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{period=b.dataset.period;document.querySelectorAll('[data-period]').forEach(x=>x.classList.toggle('active',x===b));renderChart();});
+function buckets(){const map=new Map();for(const e of data.entries){const k=period==='daily'?e.date:e.date.slice(0,7);if(!map.has(k))map.set(k,{key:k,principal:0,profit:0,loss:0});map.get(k)[e.type]+=e.amount;}return [...map.values()].sort((a,b)=>a.key.localeCompare(b.key));}
+function render(){const p=data.entries.filter(e=>e.type==='principal').reduce((s,e)=>s+e.amount,0),g=data.entries.filter(e=>e.type==='profit').reduce((s,e)=>s+e.amount,0),l=data.entries.filter(e=>e.type==='loss').reduce((s,e)=>s+e.amount,0),net=g-l;$('principalTotal').textContent=fmt(p);$('pnlTotal').textContent=fmt(net);$('pnlTotal').className=net>=0?'positive':'negative';$('currentTotal').textContent=fmt(p+net);$('history').innerHTML='';[...data.entries].sort((a,b)=>b.date.localeCompare(a.date)).forEach(e=>{const tr=document.createElement('tr');const type=e.type[0].toUpperCase()+e.type.slice(1);tr.innerHTML=`<td>${e.date}</td><td>${type}</td><td>${fmt(e.amount)}</td><td></td>`;const btn=document.createElement('button');btn.textContent='Delete';btn.className='danger';btn.onclick=async()=>{data.entries=data.entries.filter(x=>x.id!==e.id);await save();render()};tr.lastElementChild.append(btn);$('history').append(tr)});renderChart();}
+function renderChart(){
+ const c=$('chart'),ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b1627';ctx.fillRect(0,0,w,h);
+ const bs=buckets();$('chartTitle').textContent=period==='daily'?'Daily performance':'Monthly performance';
+ if(!bs.length){ctx.fillStyle='#91a4bd';ctx.font='16px system-ui';ctx.textAlign='center';ctx.fillText('Add principal, profit or loss entries to begin',w/2,h/2);return;}
+ let cumulative=0;const points=bs.map(b=>{const start=cumulative;cumulative+=b.principal;const pnl=b.profit-b.loss;return {...b,pStart:start,pEnd:cumulative,pnl};});
+ const maxVal=Math.max(1,...points.map(x=>Math.max(x.pEnd,Math.abs(x.pnl)))),minVal=Math.min(0,...points.map(x=>x.pnl));const top=maxVal*1.15,bottom=minVal<0?minVal*1.25:0;
+ const pad={l:76,r:24,t:25,b:54},plotW=w-pad.l-pad.r,plotH=h-pad.t-pad.b;
+ const y=v=>pad.t+(top-v)/(top-bottom||1)*plotH;
+ ctx.strokeStyle='#26364d';ctx.lineWidth=1;ctx.fillStyle='#91a4bd';ctx.font='11px system-ui';ctx.textAlign='right';
+ for(let i=0;i<=5;i++){const v=bottom+(top-bottom)*i/5,yy=y(v);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillText(Math.round(v).toLocaleString('en-IN'),pad.l-8,yy+4)}
+ const step=plotW/points.length,cw=Math.max(7,Math.min(24,step*.28));
+ points.forEach((p,i)=>{const x=pad.l+step*(i+.5);
+  // Principal candle: translucent blue body, cumulative principal from prior to new total.
+  const py1=y(p.pStart),py2=y(p.pEnd);ctx.fillStyle='rgba(97,169,255,.22)';ctx.strokeStyle='rgba(97,169,255,.65)';ctx.lineWidth=1;
+  const ph=Math.max(2,Math.abs(py1-py2));ctx.fillRect(x-cw-2,Math.min(py1,py2),cw,ph);ctx.strokeRect(x-cw-2,Math.min(py1,py2),cw,ph);
+  // Performance candle: zero to net result for the period.
+  const zero=y(0),end=y(p.pnl);ctx.strokeStyle=p.pnl>=0?'#16c784':'#ea3943';ctx.fillStyle=p.pnl>=0?'#16c784':'#ea3943';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x+cw/2,zero);ctx.lineTo(x+cw/2,end);ctx.stroke();ctx.fillRect(x-cw/2,Math.min(zero,end),cw,Math.max(2,Math.abs(zero-end)));
+  ctx.fillStyle='#91a4bd';ctx.font='10px system-ui';ctx.textAlign='center';const label=period==='daily'?p.key.slice(5):p.key;ctx.fillText(label,x,h-25);
+ });
+ ctx.fillStyle='#61a9ff';ctx.textAlign='left';ctx.fillText('Principal',pad.l,14);ctx.fillStyle='#16c784';ctx.fillText('Profit / loss',pad.l+75,14);
+}
+$('backupBtn').onclick=async()=>{const pass=prompt('Create a password for this external backup (at least 8 characters). It can differ from your internal password.');if(!pass)return;if(pass.length<8){alert('Use at least 8 characters.');return;}try{const blob=await encryptObject(data,pass);const file=new Blob([JSON.stringify(blob)],{type:'application/json'}),url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download='investment-tracker-backup.ivault';a.click();URL.revokeObjectURL(url);}catch(e){alert('Backup failed: '+e.message)}};
+$('restoreBtn').onclick=()=>$('restoreFile').click();
+$('restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const pass=prompt('Enter the external backup password:');if(!pass)return;try{const blob=JSON.parse(await f.text()),restored=await decryptObject(blob,pass);if(!Array.isArray(restored.entries))throw Error('Invalid backup data');if(confirm(`Import ${restored.entries.length} entries? This replaces the current tracker data.`)){data=restored;await save();render();alert('Backup imported successfully.');}}catch(err){alert('Could not open backup. Check the password and file.');}e.target.value='';};
+$('changePass').onclick=async()=>{const old=prompt('Enter current internal password:');if(old===null)return;if(old!==key.password){alert('Incorrect current password.');return;}const next=prompt('Enter new internal password (at least 8 characters):');if(!next)return;if(next.length<8){alert('Use at least 8 characters.');return;}key.password=next;await save();alert('Internal password changed.');};
+$('exportCsv').onclick=()=>{const rows=[['Date','Type','Amount'],...data.entries.map(e=>[e.date,e.type,e.amount])];const csv=rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n');const a=document.createElement('a'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.href=url;a.download='investment-entries.csv';a.click();URL.revokeObjectURL(url);};
+initLock();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
+}
+</script>
+</body></html>
